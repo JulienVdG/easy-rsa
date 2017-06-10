@@ -41,6 +41,7 @@ Here is the list of commands available with a short syntax reminder. Use the
   import-req <request_file_path> <short_basename>
   export-p7 <filename_base> [ cmd-opts ]
   export-p12 <filename_base> [ cmd-opts ]
+  publish-cert <filename_base> [ cmd-opts ]
   set-rsa-pass <filename_base> [ cmd-opts ]
   set-ec-pass <filename_base> [ cmd-opts ]
 "
@@ -137,6 +138,11 @@ cmd_help() {
       Export a PKCS#7 file with the pubkey specified by <filename_base>"
 			opts="
         noca  - do not include the ca.crt file in the PKCS7 output" ;;
+		publish-cert) text="
+  publish-cert <filename_base> [ cmd-opts ]
+      Publish the certificate specified by <filename_base>."
+			opts="
+        nostrip - do not strip plaintext" ;;
 		set-rsa-pass|set-ec-pass) text="
   set-rsa-pass <filename_base> [ cmd-opts ]
   set-ec-pass <filename_base> [ cmd-opts ]
@@ -186,6 +192,7 @@ General options:
 --batch         : set automatic (no-prompts when possible) mode
 --pki-dir=DIR   : declares the PKI directory
 --vars=FILE     : define a specific 'vars' file to use for Easy-RSA config
+--pub-dir=DIR   : declares the publish directory
 
 Certificate & Request options: (these impact cert/req field values)
 
@@ -644,6 +651,11 @@ $EASYRSA_TEMP_FILE"
 	notice "\
 Certificate created at: $crt_out
 "
+
+	# publish
+	if [ -n "$EASYRSA_PUBLISH" ]; then
+		publish cert "$2"
+	fi
 	return 0
 } # => sign_req()
 
@@ -788,6 +800,56 @@ You may now use this name to perform signing operations on this request.
 "
 	return 0
 } # => import_req()
+
+# publish backend
+publish() {
+	local type="$1" name="$2" in_file out_file format
+
+	# opts support
+	shift 2
+	local want_strip=1
+	while [ -n "$1" ]; do
+		case "$1" in
+			nostrip) want_strip= ;;
+			*) warn "Ignoring unknown command option: '$1'" ;;
+		esac
+		shift
+	done
+
+	# ensure the publish folder exists
+	[ -d "$EASYRSA_PUBLISH" ] || die "\
+Missing publish dir : $EASYRSA_PUBLISH
+"
+	if [ "$type" = "cert" ]; then
+		verify_ca_init
+		in_file="$EASYRSA_PKI/issued/${name}.crt"
+		out_file="$EASYRSA_PUBLISH/issued/${name}.crt"
+		format="x509"
+		mkdir -p "$EASYRSA_PUBLISH/issued"
+	else
+		die "\
+Unknown publish type : $type
+"
+	fi
+
+	# Verify file exists and is of the correct type
+	[ -f "$in_file" ] || die "\
+No such $type file with a basename of '$name' is present.
+Expected to find this file at:
+$in_file"
+	verify_file $format "$in_file" || die "\
+This file is not a valid $type file:
+$in_file"
+
+	if [ $want_strip ]; then
+		"$EASYRSA_OPENSSL" $format -in "$in_file" -out "$out_file"
+	else
+		cp "$in_file" "$out_file"
+	fi
+	notice "\
+Certificate published at: $out_file
+"
+} # => publish()
 
 # export pkcs#12 or pkcs#7
 export_pkcs() {
@@ -1037,6 +1099,7 @@ Note: using Easy-RSA configuration from: $vars"
 	set_var EASYRSA_TEMP_FILE_3	""
 	set_var EASYRSA_REQ_CN		ChangeMe
 	set_var EASYRSA_DIGEST		sha256
+	set_var EASYRSA_PUBLISH		""
 
 	# Detect openssl config, preferring EASYRSA_PKI over EASYRSA
 	if [ -f "$EASYRSA_PKI/openssl-1.0.cnf" ]; then
@@ -1097,6 +1160,9 @@ while :; do
 		;;
 	--pki-dir)
 		export EASYRSA_PKI="$val" ;;
+	--pub-dir|--publish-dir)
+		empty_ok=1
+		export EASYRSA_PUBLISH="$val" ;;
 	--use-algo)
 		export EASYRSA_ALGO="$val" ;;
 	--keysize)
@@ -1200,6 +1266,9 @@ case "$cmd" in
 		;;
 	export-p7)
 		export_pkcs p7 "$@"
+		;;
+	publish-cert)
+		publish cert "$@"
 		;;
 	set-rsa-pass)
 		set_pass rsa "$@"
