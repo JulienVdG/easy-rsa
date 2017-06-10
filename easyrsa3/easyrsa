@@ -1657,7 +1657,7 @@ Run easyrsa without commands for usage help."
 
 	# Determine cert/req type
 	if [ "$type" = "cert" ]; then
-		verify_ca_init
+		verify_pki_init
 		in_file="$EASYRSA_PKI/issued/${name}.crt"
 		format="x509"
 	else
