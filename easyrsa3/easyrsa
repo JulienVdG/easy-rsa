@@ -645,7 +645,10 @@ $(display_dn req "$req_in")
 
 		# Add any advanced extensions supplied by env-var:
 		[ -n "$EASYRSA_EXTRA_EXTS" ] && print "$EASYRSA_EXTRA_EXTS"
-		
+
+		# Append last any COMMON-SECTIONS file (if present)
+		cat "$EASYRSA_EXT_DIR/COMMON-SECTIONS"
+
 		: # needed to keep die from inherting the above test
 	} > "$EASYRSA_TEMP_FILE" || die "\
 Failed to create temp extension file (bad permissions?) at:
