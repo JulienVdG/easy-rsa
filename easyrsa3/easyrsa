@@ -36,6 +36,7 @@ Here is the list of commands available with a short syntax reminder. Use the
   revoke <filename_base> [cmd-opts]
   renew <filename_base> [cmd-opts]
   build-serverClient-full <filename_base> [ cmd-opts ]
+  status <filename_base>
   gen-crl
   update-db
   show-req <filename_base> [ cmd-opts ]
@@ -122,6 +123,9 @@ cmd_help() {
       Renew a certificate specified by the filename_base"
 				opts="
         nopass  - do not encrypt the private key (default is encrypted)" ;;
+		status) text="
+  status <filename_base>
+      Check the status of a certificate specified by the filename_base" ;;
 		gen-crl) text="
   gen-crl
       Generate a CRL" ;;
@@ -1331,6 +1335,29 @@ input in file: $req_in"
 	return 0
 
 } #= move_renewed()
+
+# status backend
+status() {
+	verify_ca_init
+
+	# pull filename base:
+	[ -n "$1" ] || die "\
+Error: didn't find a file base name as the first argument.
+Run easyrsa without commands for usage and command help."
+	crt_in="$EASYRSA_PKI/issued/$1.crt"
+
+	verify_file x509 "$crt_in" || die "\
+Unable to get status as the input file is not a valid certificate.
+Unexpected input in file: $crt_in"
+
+	crt_serial_file=$(cd "$EASYRSA_PKI/certs_by_serial/" && md5sum *|grep "$(md5sum $crt_in|awk '{print $1}')"|awk '{print $2}')
+
+	[ ! -f $crt_serial_file ] || die "\
+Could not find serial associated with input in file: $crt_in
+Was it signed already ?"
+
+	easyrsa_openssl ca -utf8 -status "${crt_serial_file%.pem}" -config "$EASYRSA_SSL_CONF"
+} #= status()
 
 # gen-crl backend
 gen_crl() {
@@ -2707,6 +2734,9 @@ case "$cmd" in
 		;;
 	renew)
 		renew "$@"
+		;;
+	status)
+		status "$@"
 		;;
 	import-req)
 		import_req "$@"
